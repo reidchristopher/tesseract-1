@@ -66,10 +66,18 @@ const double BULLET_DEFAULT_CONTACT_DISTANCE = 0.05;
 inline btVector3 convertEigenToBt(const Eigen::Vector3d& v) { return btVector3(v[0], v[1], v[2]); }
 inline Eigen::Vector3d convertBtToEigen(const btVector3& v) { return Eigen::Vector3d(v.x(), v.y(), v.z()); }
 inline btQuaternion convertEigenToBt(const Eigen::Quaterniond& q) { return btQuaternion(q.x(), q.y(), q.z(), q.w()); }
+
+inline btMatrix3x3 convertEigenToBt(const Eigen::Matrix3d& r)
+{
+  return btMatrix3x3(r(0, 0), r(0, 1), r(0, 2), r(1, 0), r(1, 1), r(1, 2), r(2, 0), r(2, 1), r(2, 2));
+}
+
 inline btTransform convertEigenToBt(const Eigen::Affine3d& t)
 {
-  Eigen::Quaterniond q(t.rotation());
-  return btTransform(convertEigenToBt(q), convertEigenToBt(t.translation()));
+  const Eigen::Matrix3d& rot = t.matrix().block<3,3>(0,0);
+  const Eigen::Vector3d& tran = t.translation();
+
+  return btTransform(convertEigenToBt(rot), convertEigenToBt(tran));
 }
 
 typedef std::pair<std::string, std::string> ObjectPairKey;
