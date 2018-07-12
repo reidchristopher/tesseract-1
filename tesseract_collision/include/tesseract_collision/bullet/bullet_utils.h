@@ -210,19 +210,29 @@ inline ContactResult* processResult(BulletDistanceData& cdata,
   if (!found)
   {
     ContactResultVector data;
-    data.reserve(100);  // TODO: Need better way to initialize this
-    data.emplace_back(contact);
+    if (cdata.req->type == ContactRequestType::FIRST)
+    {
+      data.emplace_back(contact);
+      cdata.done = true;
+    }
+    else
+    {
+      data.reserve(100);  // TODO: Need better way to initialize this
+      data.emplace_back(contact);
+    }
+
     return &(cdata.res->insert(std::make_pair(key, data)).first->second.back());
   }
   else
   {
+    assert(cdata.req->type != ContactRequestType::FIRST);
     ContactResultVector& dr = cdata.res->at(key);
     if (cdata.req->type == ContactRequestType::ALL)
     {
       dr.emplace_back(contact);
       return &(dr.back());
     }
-    else if (cdata.req->type == ContactRequestType::SINGLE)
+    else if (cdata.req->type == ContactRequestType::CLOSEST)
     {
       if (contact.distance < dr[0].distance)
       {
@@ -304,7 +314,8 @@ struct CollisionCollector : public btCollisionWorld::ContactResultCallback
 
   bool needsCollision(btBroadphaseProxy* proxy0) const
   {
-    return (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
+    return !m_collisions.done &&
+           (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
            !isContactAllowed(m_cow.get(),
                              static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
@@ -371,7 +382,8 @@ struct SweepCollisionCollector : public btCollisionWorld::ClosestConvexResultCal
 
   bool needsCollision(btBroadphaseProxy* proxy0) const
   {
-    return (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
+    return !m_collisions.done &&
+           (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
            !isContactAllowed(m_cow.get(),
                              static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
@@ -644,7 +656,8 @@ struct CastCollisionCollector : public btCollisionWorld::ContactResultCallback
 
   bool needsCollision(btBroadphaseProxy* proxy0) const
   {
-    return (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
+    return !m_collisions.done &&
+           (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
            !isContactAllowed(m_cow.get(),
                              static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
@@ -782,7 +795,8 @@ struct CastCollisionCollectorOriginal : public btCollisionWorld::ContactResultCa
 
   bool needsCollision(btBroadphaseProxy* proxy0) const
   {
-    return (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
+    return !m_collisions.done &&
+           (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
            !isContactAllowed(m_cow.get(),
                              static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),

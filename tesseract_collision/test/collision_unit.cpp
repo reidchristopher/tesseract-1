@@ -54,7 +54,7 @@ TEST(TesseractCollisionUnit, CollisionUnit)
   req.link_names.push_back("box_link");
   req.link_names.push_back("sphere_link");
   req.contact_distance = 0.1;
-  req.type = tesseract::ContactRequestType::SINGLE;
+  req.type = tesseract::ContactRequestType::CLOSEST;
 
   // Test when object is inside another
   tesseract::TransformMap location;
@@ -107,7 +107,7 @@ TEST(TesseractCollisionUnit, CollisionUnit)
   req.link_names.clear();
   req.link_names.push_back("sphere_link");
   req.contact_distance = 0.1;
-  req.type = tesseract::ContactRequestType::SINGLE;
+  req.type = tesseract::ContactRequestType::CLOSEST;
 
   checker.calcCollisionsContinuous(req, location, location2, result);
   tesseract::moveContactResultsMapToContactResultsVector(result, result_vector);

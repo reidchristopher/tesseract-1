@@ -65,6 +65,13 @@ void BulletContactChecker::calcDistancesDiscrete(ContactResultMap& contacts)
 
     if (collisions.done)
       break;
+
+    disableObject(cow->getName());
+  }
+
+  for (auto& obj : active_objects_)
+  {
+    enableObject(obj);
   }
 }
 
@@ -88,6 +95,8 @@ void BulletContactChecker::calcDistancesDiscrete(const ContactRequest& req,
 
     if (collisions.done)
       break;
+
+    manager.removeCollisionObject(cow->getName());
   }
 }
 
@@ -112,6 +121,8 @@ void BulletContactChecker::calcDistancesContinuous(const ContactRequest& req,
 
     if (collisions.done)
       break;
+
+    manager.removeCollisionObject(cow->getName());
   }
 }
 
