@@ -52,16 +52,34 @@ namespace tesseract
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
+BulletContactChecker::BulletContactChecker()
+{
+  name_ = "BULLET";
+  coll_config_ = std::unique_ptr<btDefaultCollisionConfiguration>(new btDefaultCollisionConfiguration());
+  dispatcher_ = std::unique_ptr<btCollisionDispatcher>(new btCollisionDispatcher(coll_config_.get()));
+  broadphase_ = std::unique_ptr<btDbvtBroadphase>(new btDbvtBroadphase());
+
+  dispatcher_->registerCollisionCreateFunc(
+      BOX_SHAPE_PROXYTYPE,
+      BOX_SHAPE_PROXYTYPE,
+      coll_config_->getCollisionAlgorithmCreateFunc(CONVEX_SHAPE_PROXYTYPE, CONVEX_SHAPE_PROXYTYPE));
+
+  dispatcher_->setDispatcherFlags(dispatcher_->getDispatcherFlags() &
+                                  ~btCollisionDispatcher::CD_USE_RELATIVE_CONTACT_BREAKING_THRESHOLD);
+
+  manager_ = BulletManagerPtr(new BulletManager(dispatcher_.get(), broadphase_.get(), coll_config_.get()));
+}
+
 void BulletContactChecker::calcDistancesDiscrete(ContactResultMap& contacts)
 {
   BulletDistanceData collisions(&request_, &contacts);
 
   for (auto& obj : active_objects_)
   {
-    const COWPtr& cow = manager_.getCollisionObject(obj);
+    const COWPtr& cow = manager_->getCollisionObject(obj);
     assert(cow);
 
-    manager_.contactDiscreteTest(cow, collisions);
+    manager_->contactDiscreteTest(cow, collisions);
 
     if (collisions.done)
       break;
@@ -79,7 +97,7 @@ void BulletContactChecker::calcDistancesDiscrete(const ContactRequest& req,
                                                  const TransformMap& transforms,
                                                  ContactResultMap& contacts) const
 {
-  BulletManager manager;
+  BulletManager manager(dispatcher_.get(), broadphase_.get(), coll_config_.get());
   BulletDistanceData collisions(&req, &contacts);
 
   std::vector<std::string> active_objects;
@@ -105,7 +123,7 @@ void BulletContactChecker::calcDistancesContinuous(const ContactRequest& req,
                                                    const TransformMap& transforms2,
                                                    ContactResultMap& contacts) const
 {
-  BulletManager manager;
+  BulletManager manager(dispatcher_.get(), broadphase_.get(), coll_config_.get());
   BulletDistanceData collisions(&req, &contacts);
 
   std::vector<std::string> active_objects;
@@ -162,7 +180,7 @@ bool BulletContactChecker::addObject(const std::string& name,
   {
     new_cow->m_enabled = enabled;
     setContactDistance(new_cow, BULLET_DEFAULT_CONTACT_DISTANCE);
-    manager_.addCollisionObject(new_cow);
+    manager_->addCollisionObject(new_cow);
     ROS_DEBUG("Added collision object for link %s", new_cow->getName().c_str());
     return true;
   }
@@ -173,12 +191,12 @@ bool BulletContactChecker::addObject(const std::string& name,
   }
 }
 
-bool BulletContactChecker::removeObject(const std::string& name) { return manager_.removeCollisionObject(name); }
-void BulletContactChecker::enableObject(const std::string& name) { manager_.enableCollisionObject(name); }
-void BulletContactChecker::disableObject(const std::string& name) { manager_.disableCollisionObject(name); }
+bool BulletContactChecker::removeObject(const std::string& name) { return manager_->removeCollisionObject(name); }
+void BulletContactChecker::enableObject(const std::string& name) { manager_->enableCollisionObject(name); }
+void BulletContactChecker::disableObject(const std::string& name) { manager_->disableCollisionObject(name); }
 void BulletContactChecker::setObjectsTransform(const std::string& name, const Eigen::Affine3d& pose)
 {
-  manager_.setCollisionObjectsTransform(name, pose);
+  manager_->setCollisionObjectsTransform(name, pose);
 }
 
 void BulletContactChecker::setObjectsTransform(const std::vector<std::string>& names,
@@ -200,7 +218,7 @@ void BulletContactChecker::setContactRequest(const ContactRequest& req)
   request_ = req;
   active_objects_.clear();
 
-  for (auto& element : manager_.getCollisionObjects())
+  for (auto& element : manager_->getCollisionObjects())
   {
     // For descrete checks we can check static to kinematic and kinematic to
     // kinematic
@@ -243,7 +261,7 @@ void BulletContactChecker::constructBulletObject(BulletManager& manager,
 {
   for (const auto& transform : transforms)
   {
-    COWPtr new_cow = manager_.cloneCollisionObject(transform.first);
+    COWPtr new_cow = manager_->cloneCollisionObject(transform.first);
     if (!new_cow || !new_cow->m_enabled)
       continue;
 
@@ -295,7 +313,7 @@ void BulletContactChecker::constructBulletObject(BulletManager& manager,
   auto it2 = transforms2.begin();
   while (it1 != transforms1.end())
   {
-    COWPtr new_cow = manager_.cloneCollisionObject(it1->first);
+    COWPtr new_cow = manager_->cloneCollisionObject(it1->first);
     if (!new_cow || !new_cow->m_enabled)
     {
       std::advance(it1, 1);
