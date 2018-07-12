@@ -55,7 +55,7 @@ class BulletContactChecker : public ContactCheckerBase
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  BulletContactChecker() { name_ = "BULLET"; }
+  BulletContactChecker();
   void calcDistancesDiscrete(ContactResultMap& contacts) override;
 
   void calcDistancesDiscrete(const ContactRequest& req,
@@ -103,9 +103,13 @@ public:
 
 private:
   std::string name_;                        /**< Name of the environment (may be empty) */
-  BulletManager manager_;                   /**< Contains the collision objects */
+  BulletManagerPtr manager_;                /**< Contains the collision objects */
   ContactRequest request_;                  /**< Active request to be used for methods that don't require a request */
   std::vector<std::string> active_objects_; /**< A list of active objects ot check for contact */
+
+  std::unique_ptr<btCollisionConfiguration> coll_config_; /**< The bullet collision configuration */
+  std::unique_ptr<btCollisionDispatcher> dispatcher_;     /**< The bullet collision dispatcher */
+  std::unique_ptr<btBroadphaseInterface> broadphase_;     /**< The bullet broadphase interface */
 
   void constructBulletObject(BulletManager& manager,
                              std::vector<std::string>& active_objects,

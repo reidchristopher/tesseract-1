@@ -166,19 +166,6 @@ typedef std::shared_ptr<const CollisionObjectWrapper> COWConstPtr;
 typedef std::map<std::string, COWPtr> Link2Cow;
 typedef std::map<std::string, COWConstPtr> Link2ConstCow;
 
-inline void nearCallback(btBroadphasePair& /*collisionPair*/,
-                         btCollisionDispatcher& /*dispatcher*/,
-                         const btDispatcherInfo& /*dispatchInfo*/)
-{
-  ROS_ERROR("error");
-  //  // only used for AllVsAll
-  //    BulletCollisionChecker* cc = static_cast<BulletCollisionChecker*>(dispatcher.m_userData);
-  //    if ( cc->CanCollide(static_cast<CollisionObjectWrapper*>(collisionPair.m_pProxy0->m_clientObject),
-  //                        static_cast<CollisionObjectWrapper*>(collisionPair.m_pProxy1->m_clientObject)))
-  //      dispatcher.defaultNearCallback(collisionPair, dispatcher, dispatchInfo);
-  //  }
-}
-
 inline bool isContactAllowed(const COW* cow0, const COW* cow1, const IsContactAllowedFn acm, bool verbose = false)
 {
   // do not distance check geoms part of the same object / link / attached body
@@ -807,29 +794,9 @@ struct CastCollisionCollectorOriginal : public btCollisionWorld::ContactResultCa
 
 struct BulletManager
 {
-  BulletManager()
+  BulletManager(btCollisionDispatcher* dispatcher, btBroadphaseInterface* broadphase, btCollisionConfiguration* coll_config)
   {
-    m_coll_config = new btDefaultCollisionConfiguration();
-    m_dispatcher = new btCollisionDispatcher(m_coll_config);
-    m_broadphase = new btDbvtBroadphase();
-    m_world = new btCollisionWorld(m_dispatcher, m_broadphase, m_coll_config);
-    m_dispatcher->registerCollisionCreateFunc(
-        BOX_SHAPE_PROXYTYPE,
-        BOX_SHAPE_PROXYTYPE,
-        m_coll_config->getCollisionAlgorithmCreateFunc(CONVEX_SHAPE_PROXYTYPE, CONVEX_SHAPE_PROXYTYPE));
-    m_dispatcher->setNearCallback(&nearCallback);
-
-    btCollisionDispatcher* dispatcher = static_cast<btCollisionDispatcher*>(m_world->getDispatcher());
-    dispatcher->setDispatcherFlags(dispatcher->getDispatcherFlags() &
-                                   ~btCollisionDispatcher::CD_USE_RELATIVE_CONTACT_BREAKING_THRESHOLD);
-  }
-
-  ~BulletManager()
-  {
-    delete m_world;
-    delete m_broadphase;
-    delete m_dispatcher;
-    delete m_coll_config;
+    m_world = std::unique_ptr<btCollisionWorld>(new btCollisionWorld(dispatcher, broadphase, coll_config));
   }
 
   COWPtr cloneCollisionObject(const std::string& name) const
@@ -935,10 +902,7 @@ struct BulletManager
   }
 
 private:
-  btCollisionWorld* m_world;
-  btBroadphaseInterface* m_broadphase;
-  btCollisionDispatcher* m_dispatcher;
-  btCollisionConfiguration* m_coll_config;
+  std::unique_ptr<btCollisionWorld> m_world;
   Link2Cow m_link2cow;
 
   void convexCastTestHelper(COWPtr& cow,
