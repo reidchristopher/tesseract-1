@@ -206,7 +206,7 @@ bool KDLEnv::continuousCollisionCheckTrajectory(const std::vector<std::string>& 
                                                 ContactResult& contacts) const
 {
   ContactRequest req;
-  req.type = ContactRequestType::SINGLE;
+  req.type = ContactRequestType::CLOSEST;
   req.link_names = link_names;
   req.contact_distance = 0.0;
   req.isContactAllowed = std::bind(&tesseract::AllowedCollisionMatrix::isCollisionAllowed,
