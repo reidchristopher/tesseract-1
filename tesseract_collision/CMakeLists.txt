@@ -52,6 +52,16 @@ target_link_libraries(${PROJECT_NAME}_bullet ${catkin_LIBRARIES} ${Boost_LIBRARI
 add_library(${PROJECT_NAME}_bullet_plugin src/bullet/bullet_plugin.cpp)
 target_link_libraries(${PROJECT_NAME}_bullet_plugin ${PROJECT_NAME}_bullet ${catkin_LIBRARIES})
 
+add_library(${PROJECT_NAME}_fcl
+#  src/fcl/fcl_contact_checker.cpp
+  src/fcl/fcl_utils.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}_fcl ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${OCTOMAP_LIBRARIES})
+
+#add_library(${PROJECT_NAME}_fcl_plugin src/fcl/fcl_plugin.cpp)
+#target_link_libraries(${PROJECT_NAME}_fcl_plugin ${PROJECT_NAME}_fcl ${catkin_LIBRARIES})
+
 # Mark executables and/or libraries for installation
 install(TARGETS ${PROJECT_NAME}_bullet
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

@@ -72,7 +72,7 @@ BulletContactChecker::BulletContactChecker()
 
 void BulletContactChecker::calcDistancesDiscrete(ContactResultMap& contacts)
 {
-  BulletDistanceData collisions(&request_, &contacts);
+  ContactDistanceData collisions(&request_, &contacts);
 
   for (auto& obj : active_objects_)
   {
@@ -98,7 +98,7 @@ void BulletContactChecker::calcDistancesDiscrete(const ContactRequest& req,
                                                  ContactResultMap& contacts) const
 {
   BulletManager manager(dispatcher_.get(), broadphase_.get(), coll_config_.get());
-  BulletDistanceData collisions(&req, &contacts);
+  ContactDistanceData collisions(&req, &contacts);
 
   std::vector<std::string> active_objects;
 
@@ -124,7 +124,7 @@ void BulletContactChecker::calcDistancesContinuous(const ContactRequest& req,
                                                    ContactResultMap& contacts) const
 {
   BulletManager manager(dispatcher_.get(), broadphase_.get(), coll_config_.get());
-  BulletDistanceData collisions(&req, &contacts);
+  ContactDistanceData collisions(&req, &contacts);
 
   std::vector<std::string> active_objects;
 

@@ -50,6 +50,7 @@
 #pragma GCC diagnostic pop
 
 #include <tesseract_core/basic_types.h>
+#include <tesseract_collision/contact_checker_common.h>
 #include <geometric_shapes/mesh_operations.h>
 #include <ros/console.h>
 
@@ -79,32 +80,6 @@ inline btTransform convertEigenToBt(const Eigen::Affine3d& t)
 
   return btTransform(convertEigenToBt(rot), convertEigenToBt(tran));
 }
-
-typedef std::pair<std::string, std::string> ObjectPairKey;
-/**
- * @brief Get a key for two object to search the collision matrix
- * @param obj1 First collision object name
- * @param obj2 Second collision object name
- * @return The collision pair key
- */
-static ObjectPairKey getObjectPairKey(const std::string& obj1, const std::string& obj2)
-{
-  return obj1 < obj2 ? std::make_pair(obj1, obj2) : std::make_pair(obj2, obj1);
-}
-
-/// Destance query results information
-struct BulletDistanceData
-{
-  BulletDistanceData(const ContactRequest* req, ContactResultMap* res) : req(req), res(res), done(false) {}
-  /// Distance query request information
-  const ContactRequest* req;
-
-  /// Destance query results information
-  ContactResultMap* res;
-
-  /// Indicate if search is finished
-  bool done;
-};
 
 class CollisionObjectWrapper : public btCollisionObject
 {
@@ -174,87 +149,15 @@ typedef std::shared_ptr<const CollisionObjectWrapper> COWConstPtr;
 typedef std::map<std::string, COWPtr> Link2Cow;
 typedef std::map<std::string, COWConstPtr> Link2ConstCow;
 
-inline bool isContactAllowed(const COW* cow0, const COW* cow1, const IsContactAllowedFn acm, bool verbose = false)
-{
-  // do not distance check geoms part of the same object / link / attached body
-  if (cow0->sameObject(*cow1))
-    return true;
-
-  if (acm != nullptr && acm(cow0->getName(), cow1->getName()))
-  {
-    if (verbose)
-    {
-      ROS_DEBUG("Collision between '%s' and '%s' is allowed. No contacts are computed.",
-                cow0->getName().c_str(),
-                cow1->getName().c_str());
-    }
-    return true;
-  }
-
-  if (verbose)
-    ROS_DEBUG("Actually checking collisions between %s and %s", cow0->getName().c_str(), cow1->getName().c_str());
-
-  return false;
-}
-
-inline ContactResult* processResult(BulletDistanceData& cdata,
-                                    ContactResult& contact,
-                                    const std::pair<std::string, std::string>& key,
-                                    bool found)
-{
-  if (!found)
-  {
-    ContactResultVector data;
-    if (cdata.req->type == ContactRequestType::FIRST)
-    {
-      data.emplace_back(contact);
-      cdata.done = true;
-    }
-    else
-    {
-      data.reserve(100);  // TODO: Need better way to initialize this
-      data.emplace_back(contact);
-    }
-
-    return &(cdata.res->insert(std::make_pair(key, data)).first->second.back());
-  }
-  else
-  {
-    assert(cdata.req->type != ContactRequestType::FIRST);
-    ContactResultVector& dr = cdata.res->at(key);
-    if (cdata.req->type == ContactRequestType::ALL)
-    {
-      dr.emplace_back(contact);
-      return &(dr.back());
-    }
-    else if (cdata.req->type == ContactRequestType::CLOSEST)
-    {
-      if (contact.distance < dr[0].distance)
-      {
-        dr[0] = contact;
-        return &(dr[0]);
-      }
-    }
-    //    else if (cdata.req->type == DistanceRequestType::LIMITED)
-    //    {
-    //      assert(dr.size() < cdata.req->max_contacts_per_body);
-    //      dr.emplace_back(contact);
-    //      return &(dr.back());
-    //    }
-  }
-
-  return nullptr;
-}
-
 struct CollisionCollector : public btCollisionWorld::ContactResultCallback
 {
-  BulletDistanceData& m_collisions;
+  ContactDistanceData& m_collisions;
   const COWPtr m_cow;
   double m_contact_distance;
 
   bool m_verbose;
 
-  CollisionCollector(BulletDistanceData& collisions, const COWPtr cow, double contact_distance, bool verbose = false)
+  CollisionCollector(ContactDistanceData& collisions, const COWPtr cow, double contact_distance, bool verbose = false)
     : m_collisions(collisions), m_cow(cow), m_contact_distance(contact_distance), m_verbose(verbose)
   {
     m_collisionFilterGroup = cow->m_collisionFilterGroup;
@@ -312,8 +215,8 @@ struct CollisionCollector : public btCollisionWorld::ContactResultCallback
     return !m_collisions.done &&
            (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
-           !isContactAllowed(m_cow.get(),
-                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
+           !isContactAllowed(m_cow.get()->getName(),
+                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject)->getName(),
                              m_collisions.req->isContactAllowed,
                              m_verbose);
   }
@@ -321,11 +224,11 @@ struct CollisionCollector : public btCollisionWorld::ContactResultCallback
 
 struct SweepCollisionCollector : public btCollisionWorld::ClosestConvexResultCallback
 {
-  BulletDistanceData& m_collisions;
+  ContactDistanceData& m_collisions;
   const COWPtr m_cow;
   bool m_verbose;
 
-  SweepCollisionCollector(BulletDistanceData& collisions, const COWPtr cow, bool verbose = false)
+  SweepCollisionCollector(ContactDistanceData& collisions, const COWPtr cow, bool verbose = false)
     : ClosestConvexResultCallback(btVector3(NAN, NAN, NAN), btVector3(NAN, NAN, NAN))
     , m_collisions(collisions)
     , m_cow(cow)
@@ -380,8 +283,8 @@ struct SweepCollisionCollector : public btCollisionWorld::ClosestConvexResultCal
     return !m_collisions.done &&
            (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
-           !isContactAllowed(m_cow.get(),
-                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
+           !isContactAllowed(m_cow.get()->getName(),
+                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject)->getName(),
                              m_collisions.req->isContactAllowed,
                              m_verbose);
   }
@@ -496,13 +399,13 @@ GetAverageSupport(const btConvexShape* shape, const btVector3& localNormal, floa
 
 struct CastCollisionCollector : public btCollisionWorld::ContactResultCallback
 {
-  BulletDistanceData& m_collisions;
+  ContactDistanceData& m_collisions;
   const COWPtr m_cow;
   double m_contact_distance;
 
   bool m_verbose;
 
-  CastCollisionCollector(BulletDistanceData& collisions,
+  CastCollisionCollector(ContactDistanceData& collisions,
                          const COWPtr cow,
                          double contact_distance,
                          bool verbose = false)
@@ -654,8 +557,8 @@ struct CastCollisionCollector : public btCollisionWorld::ContactResultCallback
     return !m_collisions.done &&
            (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
-           !isContactAllowed(m_cow.get(),
-                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
+           !isContactAllowed(m_cow.get()->getName(),
+                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject)->getName(),
                              m_collisions.req->isContactAllowed,
                              m_verbose);
   }
@@ -663,13 +566,13 @@ struct CastCollisionCollector : public btCollisionWorld::ContactResultCallback
 
 struct CastCollisionCollectorOriginal : public btCollisionWorld::ContactResultCallback
 {
-  BulletDistanceData& m_collisions;
+  ContactDistanceData& m_collisions;
   const COWPtr m_cow;
   double m_contact_distance;
 
   bool m_verbose;
 
-  CastCollisionCollectorOriginal(BulletDistanceData& collisions,
+  CastCollisionCollectorOriginal(ContactDistanceData& collisions,
                                  const COWPtr cow,
                                  double contact_distance,
                                  bool verbose = false)
@@ -793,8 +696,8 @@ struct CastCollisionCollectorOriginal : public btCollisionWorld::ContactResultCa
     return !m_collisions.done &&
            (proxy0->m_collisionFilterGroup & m_collisionFilterMask) &&
            (m_collisionFilterGroup & proxy0->m_collisionFilterMask) &&
-           !isContactAllowed(m_cow.get(),
-                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject),
+           !isContactAllowed(m_cow.get()->getName(),
+                             static_cast<CollisionObjectWrapper*>(proxy0->m_clientObject)->getName(),
                              m_collisions.req->isContactAllowed,
                              m_verbose);
   }
@@ -877,7 +780,7 @@ struct BulletManager
     return false;
   }
 
-  void contactDiscreteTest(const COWPtr& cow, BulletDistanceData& collisions)
+  void contactDiscreteTest(const COWPtr& cow, ContactDistanceData& collisions)
   {
     assert(cow->getBroadphaseHandle()->m_collisionFilterGroup == cow->m_collisionFilterGroup);
     assert(cow->getBroadphaseHandle()->m_collisionFilterMask == cow->m_collisionFilterMask);
@@ -885,7 +788,7 @@ struct BulletManager
     m_world->contactTest(cow.get(), cc);
   }
 
-  void contactCastTest(const COWPtr& cow, BulletDistanceData& collisions)
+  void contactCastTest(const COWPtr& cow, ContactDistanceData& collisions)
   {
     assert(cow->getBroadphaseHandle()->m_collisionFilterGroup == cow->m_collisionFilterGroup);
     assert(cow->getBroadphaseHandle()->m_collisionFilterMask == cow->m_collisionFilterMask);
@@ -896,14 +799,14 @@ struct BulletManager
   void contactCastTestOriginal(const std::string& link_name,
                                const btTransform& tf1,
                                const btTransform& tf2,
-                               BulletDistanceData& collisions)
+                               ContactDistanceData& collisions)
   {
     COWPtr cow = m_link2cow[link_name];
     convexCastTestHelper(cow, cow->getCollisionShape(), tf1, tf2, collisions);
   }
 
   void
-  convexSweepTest(const COWPtr& cow, const btTransform& tf1, const btTransform& tf2, BulletDistanceData& collisions)
+  convexSweepTest(const COWPtr& cow, const btTransform& tf1, const btTransform& tf2, ContactDistanceData& collisions)
   {
     SweepCollisionCollector cc(collisions, cow);
     convexSweepTestHelper(cow->getCollisionShape(), tf1, tf2, cc);
@@ -917,7 +820,7 @@ private:
                             btCollisionShape* shape,
                             const btTransform& tf0,
                             const btTransform& tf1,
-                            BulletDistanceData& collisions)
+                            ContactDistanceData& collisions)
   {
     if (btBroadphaseProxy::isConvex(shape->getShapeType()))
     {

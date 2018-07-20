@@ -6,8 +6,8 @@ add_compile_options(-std=c++11 -w)
 find_package(catkin REQUIRED COMPONENTS)
 
 catkin_package(
-  INCLUDE_DIRS bullet3/src bullet3/Extras
-  LIBRARIES BulletCollision BulletDynamics LinearMath ConvexDecomposition
+  INCLUDE_DIRS bullet3/src bullet3/Extras ${CMAKE_CURRENT_BINARY_DIR}/fcl/include fcl/include
+  LIBRARIES BulletCollision BulletDynamics LinearMath ConvexDecomposition fcl
 )
 
 set(BUILD_PYBULLET, ON)
