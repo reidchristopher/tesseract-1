@@ -37,7 +37,7 @@ namespace tesseract
 {
 namespace tesseract_planning
 {
-bool TrajoptPlanner::solve(PlannerResponse&)
+bool TrajoptPlanner::solve(PlannerResponse& response)
 {
   Json::Value root;
   Json::Reader reader;
@@ -46,7 +46,10 @@ bool TrajoptPlanner::solve(PlannerResponse&)
     bool parse_success = reader.parse(request_.config.c_str(), root);
     if (!parse_success)
     {
-      ROS_FATAL("Failed to load trajopt json file from ros parameter");
+      ROS_FATAL("Failed to pass valid json file in the request");
+      response.status_code = -2;
+      response.status_description = status_code_map_[-2];
+      return false;
     }
   }
   else
@@ -54,9 +57,17 @@ bool TrajoptPlanner::solve(PlannerResponse&)
     ROS_FATAL("Invalid config format: %s. Only json format is currently "
               "support for this planner.",
               request_.config_format.c_str());
+    response.status_code = -1;
+    response.status_description = status_code_map_[-1];
+    return false;
   }
 
   TrajOptProbPtr prob = ConstructProblem(root, request_.env);
+  return solve(prob, response);
+}
+
+bool TrajoptPlanner::solve(trajopt::TrajOptProbPtr prob, PlannerResponse& response)
+{
   BasicTrustRegionSQP opt(prob);
   opt.initialize(trajToDblVec(prob->GetInitTraj()));
   ros::Time tStart = ros::Time::now();
@@ -67,17 +78,24 @@ bool TrajoptPlanner::solve(PlannerResponse&)
   const std::vector<std::string>& joint_names = prob->GetKin()->getJointNames();
   const std::vector<std::string>& link_names = prob->GetKin()->getLinkNames();
 
+
   collisions.clear();
-  request_.env->continuousCollisionCheckTrajectory(
+  prob->GetEnv()->continuousCollisionCheckTrajectory(
       joint_names, link_names, getTraj(opt.x(), prob->GetVars()), collisions);
 
   tesseract::ContactResultVector collision_vector;
   tesseract::moveContactResultsMapToContactResultsVector(collisions, collision_vector);
-  ROS_INFO("Final trajectory number of continuous collisions: %lui\n", collision_vector.size());
+  ROS_INFO("Final trajectory number of continuous collisions: %lu\n", collision_vector.size());
+
+  response.trajectory = getTraj(opt.x(), prob->GetVars());
+  response.joint_names = joint_names;
+  response.status_code = opt.results().status;
+  response.status_description = sco::statusToString(opt.results().status);
   return true;
 }
 
-bool terminate() { return false; }
-void clear() {}
+bool TrajoptPlanner::terminate() { return false; }
+void TrajoptPlanner::clear() { request_ = PlannerRequest(); }
+
 }
 }
