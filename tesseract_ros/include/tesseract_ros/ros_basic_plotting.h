@@ -61,6 +61,8 @@ public:
     scene_pub_.publish(msg);
   }
 
+  // traj is expect to hold dt values in the last column
+  // dt_i is the time between state i - 1 and i
   void plotTrajectory(const std::vector<std::string>& joint_names, const Eigen::Ref<const TrajArray>& traj) override
   {
     tesseract_msgs::Trajectory msg;
@@ -77,6 +79,7 @@ public:
 
     msg.joint_trajectory.joint_names.resize(current_state->joints.size());
     msg.joint_trajectory.points.resize(traj.rows());
+    double time_from_start = 0.0;
     for (int i = 0; i < traj.rows(); ++i)
     {
       trajectory_msgs::JointTrajectoryPoint jtp;
@@ -94,14 +97,18 @@ public:
 
         ++j;
       }
-      jtp.time_from_start = ros::Duration(i);
+      if (i != 0)
+      {
+        time_from_start += traj(i, traj.cols() - 1);
+      }
+      jtp.time_from_start = ros::Duration(time_from_start);
       msg.joint_trajectory.points[i] = jtp;
     }
 
     // Update only the joints which were provided.
     for (int i = 0; i < traj.rows(); ++i)
     {
-      for (int j = 0; j < traj.cols(); ++j)
+      for (int j = 0; j < traj.cols() - 1; ++j)
       {
         msg.joint_trajectory.points[i].positions[jn_to_index[joint_names[j]]] = traj(i, j);
       }
